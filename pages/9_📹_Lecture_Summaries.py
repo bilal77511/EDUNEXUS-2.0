@@ -2,6 +2,32 @@ import streamlit as st
 from utils import load_css, run_watson_granite, show_error, show_success, show_info
 from youtube_transcript_api import YouTubeTranscriptApi
 import json
+import requests
+from urllib.parse import urlparse, parse_qs
+
+# Move these functions right after imports (around line 7)
+def get_video_id(url):
+    """Extract video ID from YouTube URL"""
+    parsed_url = urlparse(url)
+    if parsed_url.hostname in ['www.youtube.com', 'youtube.com']:
+        return parse_qs(parsed_url.query).get('v', [None])[0]
+    elif parsed_url.hostname in ['youtu.be']:
+        return parsed_url.path[1:]
+    return None
+
+def get_transcript(video_id):
+    """Get transcript with custom headers to avoid YouTube blocking"""
+    try:
+        # Try getting transcript directly first
+        try:
+            return YouTubeTranscriptApi.get_transcript(video_id)
+        except:
+            # If direct attempt fails, try with language specification
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            transcript = transcript_list.find_transcript(['en'])
+            return transcript.fetch()
+    except Exception as e:
+        return None
 
 # Page config
 st.set_page_config(page_title="Lecture Summaries", page_icon="📹", layout="wide")
@@ -47,10 +73,19 @@ youtube_url = st.text_input("📺 YouTube Video URL", placeholder="Paste the vid
 # Process URL
 if youtube_url:
     try:
-        video_id = youtube_url.split('v=')[1].split('&')[0] if 'youtube.com' in youtube_url else youtube_url.split('youtu.be/')[1]
-        transcript = YouTubeTranscriptApi.get_transcript(video_id)
-        transcript_text = " ".join([item['text'] for item in transcript])
-        show_success("Transcript fetched successfully!")
+        video_id = get_video_id(youtube_url)
+        if not video_id:
+            show_error("Invalid YouTube URL format")
+            st.stop()
+            
+        transcript = get_transcript(video_id)
+        if transcript:
+            transcript_text = " ".join([item['text'] for item in transcript])
+            show_success("Transcript fetched successfully!")
+        else:
+            show_error("Could not retrieve transcript. Please ensure the video has subtitles enabled.")
+            transcript_text = None
+            
     except Exception as e:
         show_error(f"Error fetching transcript: {str(e)}")
         transcript_text = None
