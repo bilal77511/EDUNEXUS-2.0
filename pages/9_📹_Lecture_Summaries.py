@@ -4,6 +4,7 @@ from youtube_transcript_api import YouTubeTranscriptApi
 import json
 import requests
 from urllib.parse import urlparse, parse_qs
+import random
 
 # Move these functions right after imports (around line 7)
 def get_video_id(url):
@@ -16,16 +17,35 @@ def get_video_id(url):
     return None
 
 def get_transcript(video_id):
-    """Get transcript with custom headers to avoid YouTube blocking"""
+    """Get transcript using proxy rotation"""
     try:
-        # Try getting transcript directly first
-        try:
-            return YouTubeTranscriptApi.get_transcript(video_id)
-        except:
-            # If direct attempt fails, try with language specification
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-            transcript = transcript_list.find_transcript(['en'])
-            return transcript.fetch()
+        # List of free proxy services
+        proxies = [
+            None,  # Try without proxy first
+            {'http': 'http://proxy.scrapingbee.com:8080'},
+            {'http': 'http://proxy.scrapeops.io:8080'},
+            {'https': 'https://proxy.webshare.io:80'}
+        ]
+        
+        for proxy in proxies:
+            try:
+                return YouTubeTranscriptApi.get_transcript(
+                    video_id,
+                    proxies=proxy,
+                    cookies={'CONSENT': 'YES+1'}
+                )
+            except:
+                continue
+                
+        # If all proxies fail, try with different language codes
+        languages = ['en', 'en-US', 'en-GB', 'auto']
+        for lang in languages:
+            try:
+                return YouTubeTranscriptApi.get_transcript(video_id, languages=[lang])
+            except:
+                continue
+                
+        return None
     except Exception as e:
         return None
 
